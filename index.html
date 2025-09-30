@@ -1,0 +1,398 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>預算追蹤工具 | Budget Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="number"], input[type="text"], select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #balance {
+            font-size: 24px;
+            text-align: center;
+            margin: 20px 0;
+            color: #333;
+        }
+        #balance.positive {
+            color: #4CAF50;
+        }
+        #balance.negative {
+            color: #f44336;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .delete-btn {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="section">
+            <label for="languageSelect">語言 | Language:</label>
+            <select id="languageSelect" onchange="changeLanguage()">
+                <option value="zh-TW">繁體中文</option>
+                <option value="en">English</option>
+            </select>
+        </div>
+        <h1 id="title">預算追蹤工具</h1>
+        
+        <!-- 設定初始預算 -->
+        <div class="section">
+            <label for="initialBudget" id="initialBudgetLabel">設定初始預算 (NTD):</label>
+            <input type="number" id="initialBudget" placeholder="輸入初始預算金額" step="0.01">
+            <button onclick="setInitialBudget()" id="setBudgetBtn">設定預算</button>
+        </div>
+        
+        <!-- 添加收入 -->
+        <div class="section">
+            <label for="incomeAmount" id="incomeLabel">添加收入 (NTD):</label>
+            <input type="number" id="incomeAmount" placeholder="輸入收入金額" step="0.01">
+            <button onclick="addIncome()" id="addIncomeBtn">添加收入</button>
+        </div>
+        
+        <!-- 添加支出 -->
+        <div class="section">
+            <label for="expenseCategory" id="expenseCategoryLabel">支出類別:</label>
+            <select id="expenseCategory">
+                <option value="food">食物</option>
+                <option value="transport">交通</option>
+                <option value="entertainment">娛樂</option>
+                <option value="shopping">購物</option>
+                <option value="other">其他</option>
+            </select>
+            <label for="expenseAmount" id="expenseAmountLabel">支出金額 (NTD):</label>
+            <input type="number" id="expenseAmount" placeholder="輸入支出金額" step="0.01">
+            <button onclick="addExpense()" id="addExpenseBtn">添加支出</button>
+        </div>
+        
+        <!-- 顯示餘額 -->
+        <div id="balance">目前餘額: 0.00 NTD</div>
+        
+        <!-- 交易記錄 -->
+        <div class="section">
+            <h2 id="transactionsTitle">交易記錄</h2>
+            <table id="transactionTable">
+                <thead>
+                    <tr>
+                        <th id="typeHeader">類型</th>
+                        <th id="categoryHeader">類別</th>
+                        <th id="amountHeader">金額 (NTD)</th>
+                        <th id="dateHeader">日期</th>
+                        <th id="actionHeader">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- 交易將動態添加這裡 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let balance = 0;
+        let transactions = [];
+        let currentLang = 'zh-TW';
+
+        const translations = {
+            'zh-TW': {
+                title: '預算追蹤工具',
+                initialBudgetLabel: '設定初始預算 (NTD):',
+                setBudgetBtn: '設定預算',
+                incomeLabel: '添加收入 (NTD):',
+                addIncomeBtn: '添加收入',
+                expenseCategoryLabel: '支出類別:',
+                expenseAmountLabel: '支出金額 (NTD):',
+                addExpenseBtn: '添加支出',
+                transactionsTitle: '交易記錄',
+                typeHeader: '類型',
+                categoryHeader: '類別',
+                amountHeader: '金額 (NTD)',
+                dateHeader: '日期',
+                actionHeader: '操作',
+                initialBudget: '初始預算',
+                income: '收入',
+                expense: '支出',
+                balance: '目前餘額: {amount} NTD',
+                initialBudgetPlaceholder: '輸入初始預算金額',
+                incomePlaceholder: '輸入收入金額',
+                expensePlaceholder: '輸入支出金額',
+                invalidAmount: '請輸入有效的金額',
+                invalidIncome: '請輸入有效的收入金額',
+                invalidExpense: '請輸入有效的支出金額',
+                deleteBtn: '刪除',
+                categories: {
+                    food: '食物',
+                    transport: '交通',
+                    entertainment: '娛樂',
+                    shopping: '購物',
+                    other: '其他'
+                }
+            },
+            'en': {
+                title: 'Budget Tracker',
+                initialBudgetLabel: 'Set Initial Budget (NTD):',
+                setBudgetBtn: 'Set Budget',
+                incomeLabel: 'Add Income (NTD):',
+                addIncomeBtn: 'Add Income',
+                expenseCategoryLabel: 'Expense Category:',
+                expenseAmountLabel: 'Expense Amount (NTD):',
+                addExpenseBtn: 'Add Expense',
+                transactionsTitle: 'Transaction History',
+                typeHeader: 'Type',
+                categoryHeader: 'Category',
+                amountHeader: 'Amount (NTD)',
+                dateHeader: 'Date',
+                actionHeader: 'Action',
+                initialBudget: 'Initial Budget',
+                income: 'Income',
+                expense: 'Expense',
+                balance: 'Current Balance: {amount} NTD',
+                initialBudgetPlaceholder: 'Enter initial budget amount',
+                incomePlaceholder: 'Enter income amount',
+                expensePlaceholder: 'Enter expense amount',
+                invalidAmount: 'Please enter a valid amount',
+                invalidIncome: 'Please enter a valid income amount',
+                invalidExpense: 'Please enter a valid expense amount',
+                deleteBtn: 'Delete',
+                categories: {
+                    food: 'Food',
+                    transport: 'Transport',
+                    entertainment: 'Entertainment',
+                    shopping: 'Shopping',
+                    other: 'Other'
+                }
+            }
+        };
+
+        function changeLanguage() {
+            currentLang = document.getElementById('languageSelect').value;
+            const lang = translations[currentLang];
+            document.getElementById('title').textContent = lang.title;
+            document.getElementById('initialBudgetLabel').textContent = lang.initialBudgetLabel;
+            document.getElementById('setBudgetBtn').textContent = lang.setBudgetBtn;
+            document.getElementById('incomeLabel').textContent = lang.incomeLabel;
+            document.getElementById('addIncomeBtn').textContent = lang.addIncomeBtn;
+            document.getElementById('expenseCategoryLabel').textContent = lang.expenseCategoryLabel;
+            document.getElementById('expenseAmountLabel').textContent = lang.expenseAmountLabel;
+            document.getElementById('addExpenseBtn').textContent = lang.addExpenseBtn;
+            document.getElementById('transactionsTitle').textContent = lang.transactionsTitle;
+            document.getElementById('typeHeader').textContent = lang.typeHeader;
+            document.getElementById('categoryHeader').textContent = lang.categoryHeader;
+            document.getElementById('amountHeader').textContent = lang.amountHeader;
+            document.getElementById('dateHeader').textContent = lang.dateHeader;
+            document.getElementById('actionHeader').textContent = lang.actionHeader;
+            document.getElementById('initialBudget').placeholder = lang.initialBudgetPlaceholder;
+            document.getElementById('incomeAmount').placeholder = lang.incomePlaceholder;
+            document.getElementById('expenseAmount').placeholder = lang.expensePlaceholder;
+            
+            // 更新支出類別選項
+            const expenseCategory = document.getElementById('expenseCategory');
+            expenseCategory.innerHTML = `
+                <option value="food">${lang.categories.food}</option>
+                <option value="transport">${lang.categories.transport}</option>
+                <option value="entertainment">${lang.categories.entertainment}</option>
+                <option value="shopping">${lang.categories.shopping}</option>
+                <option value="other">${lang.categories.other}</option>
+            `;
+
+            updateBalance();
+            renderTransactions();
+        }
+
+        function updateBalance() {
+            const balanceElement = document.getElementById('balance');
+            balanceElement.textContent = translations[currentLang].balance.replace('{amount}', balance.toFixed(2));
+            if (balance > 0) {
+                balanceElement.classList.add('positive');
+                balanceElement.classList.remove('negative');
+            } else if (balance < 0) {
+                balanceElement.classList.add('negative');
+                balanceElement.classList.remove('positive');
+            } else {
+                balanceElement.classList.remove('positive', 'negative');
+            }
+        }
+
+        function addTransaction(type, category, amount) {
+            const date = new Date().toLocaleString(currentLang === 'zh-TW' ? 'zh-TW' : 'en-US');
+            transactions.push({ type, category, amount, date });
+            renderTransactions();
+        }
+
+        function renderTransactions() {
+            const tbody = document.querySelector('#transactionTable tbody');
+            tbody.innerHTML = '';
+            transactions.forEach((tx, index) => {
+                const lang = translations[currentLang];
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${lang[tx.type]}</td>
+                    <td>${tx.category ? lang.categories[tx.category] : '-'}</td>
+                    <td>${tx.amount.toFixed(2)}</td>
+                    <td>${tx.date}</td>
+                    <td><button class="delete-btn" onclick="deleteTransaction(${index})">${lang.deleteBtn}</button></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function deleteTransaction(index) {
+            const tx = transactions[index];
+            if (tx.type === 'income' || tx.type === '收入') {
+                balance -= tx.amount;
+            } else if (tx.type === 'expense' || tx.type === '支出') {
+                balance += tx.amount;
+            }
+            transactions.splice(index, 1);
+            updateBalance();
+            renderTransactions();
+        }
+
+        function setInitialBudget() {
+            const initial = parseFloat(document.getElementById('initialBudget').value);
+            if (!isNaN(initial)) {
+                balance = initial;
+                updateBalance();
+                addTransaction('initialBudget', null, initial);
+                document.getElementById('initialBudget').value = '';
+            } else {
+                alert(translations[currentLang].invalidAmount);
+            }
+        }
+
+        function addIncome() {
+            const amount = parseFloat(document.getElementById('incomeAmount').value);
+            if (!isNaN(amount) && amount > 0) {
+                balance += amount;
+                updateBalance();
+                addTransaction('income', null, amount);
+                document.getElementById('incomeAmount').value = '';
+            } else {
+                alert(translations[currentLang].invalidIncome);
+            }
+        }
+
+        function addExpense() {
+            const category = document.getElementById('expenseCategory').value;
+            const amount = parseFloat(document.getElementById('expenseAmount').value);
+            if (!isNaN(amount) && amount > 0) {
+                balance -= amount;
+                updateBalance();
+                addTransaction('expense', category, amount);
+                document.getElementById('expenseAmount').value = '';
+            } else {
+                alert(translations[currentLang].invalidExpense);
+            }
+        }
+
+        // 初始化
+        changeLanguage();
+        updateBalance();
+    </script>
+</body>
+</html>
