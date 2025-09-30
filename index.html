@@ -92,6 +92,13 @@
         button:hover {
             background-color: #45a049;
         }
+        #clearDataBtn {
+            background-color: #f44336;
+            margin-top: 10px;
+        }
+        #clearDataBtn:hover {
+            background-color: #d32f2f;
+        }
         #balance {
             font-size: 24px;
             text-align: center;
@@ -133,24 +140,34 @@
 <body>
     <div class="container">
         <div class="section">
-            <label for="languageSelect">語言 | Language:</label>
+            <label for="languageSelect" id="languageLabel">語言 | Language:</label>
             <select id="languageSelect" onchange="changeLanguage()">
                 <option value="zh-TW">繁體中文</option>
                 <option value="en">English</option>
+            </select>
+        </div>
+        <div class="section">
+            <label for="currencySelect" id="currencyLabel">貨幣 | Currency:</label>
+            <select id="currencySelect" onchange="changeCurrency()">
+                <option value="NTD">NTD (新台幣)</option>
+                <option value="USD">USD (美元)</option>
+                <option value="EUR">EUR (歐元)</option>
+                <option value="CNY">CNY (人民幣)</option>
+                <option value="HKD">HKD (港幣)</option>
             </select>
         </div>
         <h1 id="title">預算追蹤工具</h1>
         
         <!-- 設定初始預算 -->
         <div class="section">
-            <label for="initialBudget" id="initialBudgetLabel">設定初始預算 (NTD):</label>
+            <label for="initialBudget" id="initialBudgetLabel">設定初始預算:</label>
             <input type="number" id="initialBudget" placeholder="輸入初始預算金額" step="0.01">
             <button onclick="setInitialBudget()" id="setBudgetBtn">設定預算</button>
         </div>
         
         <!-- 添加收入 -->
         <div class="section">
-            <label for="incomeAmount" id="incomeLabel">添加收入 (NTD):</label>
+            <label for="incomeAmount" id="incomeLabel">添加收入:</label>
             <input type="number" id="incomeAmount" placeholder="輸入收入金額" step="0.01">
             <button onclick="addIncome()" id="addIncomeBtn">添加收入</button>
         </div>
@@ -165,7 +182,7 @@
                 <option value="shopping">購物</option>
                 <option value="other">其他</option>
             </select>
-            <label for="expenseAmount" id="expenseAmountLabel">支出金額 (NTD):</label>
+            <label for="expenseAmount" id="expenseAmountLabel">支出金額:</label>
             <input type="number" id="expenseAmount" placeholder="輸入支出金額" step="0.01">
             <button onclick="addExpense()" id="addExpenseBtn">添加支出</button>
         </div>
@@ -181,7 +198,7 @@
                     <tr>
                         <th id="typeHeader">類型</th>
                         <th id="categoryHeader">類別</th>
-                        <th id="amountHeader">金額 (NTD)</th>
+                        <th id="amountHeader">金額</th>
                         <th id="dateHeader">日期</th>
                         <th id="actionHeader">操作</th>
                     </tr>
@@ -190,34 +207,47 @@
                     <!-- 交易將動態添加這裡 -->
                 </tbody>
             </table>
+            <button onclick="clearData()" id="clearDataBtn">清除所有資料</button>
         </div>
     </div>
 
     <script>
-        let balance = 0;
+        let balance = 0; // 以 NTD 為基準儲存餘額
         let transactions = [];
         let currentLang = 'zh-TW';
+        let currentCurrency = 'NTD';
+        
+        // 假設的匯率（可替換為 API 獲取即時匯率）
+        const exchangeRates = {
+            NTD: 1,
+            USD: 0.031, // 1 NTD = 0.031 USD
+            EUR: 0.028, // 1 NTD = 0.028 EUR
+            CNY: 0.22,  // 1 NTD = 0.22 CNY
+            HKD: 0.24   // 1 NTD = 0.24 HKD
+        };
 
         const translations = {
             'zh-TW': {
+                languageLabel: '語言 | Language:',
+                currencyLabel: '貨幣 | Currency:',
                 title: '預算追蹤工具',
-                initialBudgetLabel: '設定初始預算 (NTD):',
+                initialBudgetLabel: '設定初始預算 ({currency}):',
                 setBudgetBtn: '設定預算',
-                incomeLabel: '添加收入 (NTD):',
+                incomeLabel: '添加收入 ({currency}):',
                 addIncomeBtn: '添加收入',
                 expenseCategoryLabel: '支出類別:',
-                expenseAmountLabel: '支出金額 (NTD):',
+                expenseAmountLabel: '支出金額 ({currency}):',
                 addExpenseBtn: '添加支出',
                 transactionsTitle: '交易記錄',
                 typeHeader: '類型',
                 categoryHeader: '類別',
-                amountHeader: '金額 (NTD)',
+                amountHeader: '金額 ({currency})',
                 dateHeader: '日期',
                 actionHeader: '操作',
                 initialBudget: '初始預算',
                 income: '收入',
                 expense: '支出',
-                balance: '目前餘額: {amount} NTD',
+                balance: '目前餘額: {amount} {currency}',
                 initialBudgetPlaceholder: '輸入初始預算金額',
                 incomePlaceholder: '輸入收入金額',
                 expensePlaceholder: '輸入支出金額',
@@ -225,6 +255,8 @@
                 invalidIncome: '請輸入有效的收入金額',
                 invalidExpense: '請輸入有效的支出金額',
                 deleteBtn: '刪除',
+                clearDataBtn: '清除所有資料',
+                clearDataConfirm: '確定要清除所有資料嗎？此操作無法恢復！',
                 categories: {
                     food: '食物',
                     transport: '交通',
@@ -234,24 +266,26 @@
                 }
             },
             'en': {
+                languageLabel: 'Language:',
+                currencyLabel: 'Currency:',
                 title: 'Budget Tracker',
-                initialBudgetLabel: 'Set Initial Budget (NTD):',
+                initialBudgetLabel: 'Set Initial Budget ({currency}):',
                 setBudgetBtn: 'Set Budget',
-                incomeLabel: 'Add Income (NTD):',
+                incomeLabel: 'Add Income ({currency}):',
                 addIncomeBtn: 'Add Income',
                 expenseCategoryLabel: 'Expense Category:',
-                expenseAmountLabel: 'Expense Amount (NTD):',
+                expenseAmountLabel: 'Expense Amount ({currency}):',
                 addExpenseBtn: 'Add Expense',
                 transactionsTitle: 'Transaction History',
                 typeHeader: 'Type',
                 categoryHeader: 'Category',
-                amountHeader: 'Amount (NTD)',
+                amountHeader: 'Amount ({currency})',
                 dateHeader: 'Date',
                 actionHeader: 'Action',
                 initialBudget: 'Initial Budget',
                 income: 'Income',
                 expense: 'Expense',
-                balance: 'Current Balance: {amount} NTD',
+                balance: 'Current Balance: {amount} {currency}',
                 initialBudgetPlaceholder: 'Enter initial budget amount',
                 incomePlaceholder: 'Enter income amount',
                 expensePlaceholder: 'Enter expense amount',
@@ -259,6 +293,8 @@
                 invalidIncome: 'Please enter a valid income amount',
                 invalidExpense: 'Please enter a valid expense amount',
                 deleteBtn: 'Delete',
+                clearDataBtn: 'Clear All Data',
+                clearDataConfirm: 'Are you sure you want to clear all data? This action cannot be undone!',
                 categories: {
                     food: 'Food',
                     transport: 'Transport',
@@ -269,23 +305,112 @@
             }
         };
 
+        // 保存狀態到 localStorage
+        function saveState() {
+            try {
+                const state = {
+                    balance: balance,
+                    transactions: transactions,
+                    currentLang: currentLang,
+                    currentCurrency: currentCurrency,
+                    version: '1.0' // 版本控制，方便未來升級
+                };
+                localStorage.setItem('budgetTrackerState', JSON.stringify(state));
+            } catch (e) {
+                console.error('Failed to save state to localStorage:', e);
+            }
+        }
+
+        // 從 localStorage 載入狀態
+        function loadState() {
+            try {
+                const savedState = localStorage.getItem('budgetTrackerState');
+                if (!savedState) return;
+
+                const state = JSON.parse(savedState);
+
+                // 驗證資料完整性
+                if (typeof state.balance !== 'number' ||
+                    !Array.isArray(state.transactions) ||
+                    !['zh-TW', 'en'].includes(state.currentLang) ||
+                    !['NTD', 'USD', 'EUR', 'CNY', 'HKD'].includes(state.currentCurrency)) {
+                    console.warn('Invalid state data, resetting to defaults');
+                    return;
+                }
+
+                // 驗證交易格式
+                const validTypes = ['initialBudget', 'income', 'expense', '初始預算', '收入', '支出'];
+                const validCategories = ['food', 'transport', 'entertainment', 'shopping', 'other', null];
+                const validCurrencies = Object.keys(exchangeRates);
+                const isValidTransaction = tx => 
+                    validTypes.includes(tx.type) &&
+                    validCategories.includes(tx.category) &&
+                    typeof tx.amount === 'number' &&
+                    typeof tx.date === 'string' &&
+                    validCurrencies.includes(tx.currency);
+
+                if (!state.transactions.every(isValidTransaction)) {
+                    console.warn('Invalid transaction data, resetting transactions');
+                    state.transactions = [];
+                }
+
+                balance = state.balance || 0;
+                transactions = state.transactions || [];
+                currentLang = state.currentLang || 'zh-TW';
+                currentCurrency = state.currentCurrency || 'NTD';
+                document.getElementById('languageSelect').value = currentLang;
+                document.getElementById('currencySelect').value = currentCurrency;
+            } catch (e) {
+                console.error('Failed to load state from localStorage:', e);
+            }
+        }
+
+        // 清除所有資料
+        function clearData() {
+            const lang = translations[currentLang];
+            if (confirm(lang.clearDataConfirm)) {
+                balance = 0;
+                transactions = [];
+                currentLang = 'zh-TW';
+                currentCurrency = 'NTD';
+                document.getElementById('languageSelect').value = currentLang;
+                document.getElementById('currencySelect').value = currentCurrency;
+                localStorage.removeItem('budgetTrackerState');
+                updateInterface();
+            }
+        }
+
         function changeLanguage() {
             currentLang = document.getElementById('languageSelect').value;
+            updateInterface();
+            saveState();
+        }
+
+        function changeCurrency() {
+            currentCurrency = document.getElementById('currencySelect').value;
+            updateInterface();
+            saveState();
+        }
+
+        function updateInterface() {
             const lang = translations[currentLang];
+            document.getElementById('languageLabel').textContent = lang.languageLabel;
+            document.getElementById('currencyLabel').textContent = lang.currencyLabel;
             document.getElementById('title').textContent = lang.title;
-            document.getElementById('initialBudgetLabel').textContent = lang.initialBudgetLabel;
+            document.getElementById('initialBudgetLabel').textContent = lang.initialBudgetLabel.replace('{currency}', currentCurrency);
             document.getElementById('setBudgetBtn').textContent = lang.setBudgetBtn;
-            document.getElementById('incomeLabel').textContent = lang.incomeLabel;
+            document.getElementById('incomeLabel').textContent = lang.incomeLabel.replace('{currency}', currentCurrency);
             document.getElementById('addIncomeBtn').textContent = lang.addIncomeBtn;
             document.getElementById('expenseCategoryLabel').textContent = lang.expenseCategoryLabel;
-            document.getElementById('expenseAmountLabel').textContent = lang.expenseAmountLabel;
+            document.getElementById('expenseAmountLabel').textContent = lang.expenseAmountLabel.replace('{currency}', currentCurrency);
             document.getElementById('addExpenseBtn').textContent = lang.addExpenseBtn;
             document.getElementById('transactionsTitle').textContent = lang.transactionsTitle;
             document.getElementById('typeHeader').textContent = lang.typeHeader;
             document.getElementById('categoryHeader').textContent = lang.categoryHeader;
-            document.getElementById('amountHeader').textContent = lang.amountHeader;
+            document.getElementById('amountHeader').textContent = lang.amountHeader.replace('{currency}', currentCurrency);
             document.getElementById('dateHeader').textContent = lang.dateHeader;
             document.getElementById('actionHeader').textContent = lang.actionHeader;
+            document.getElementById('clearDataBtn').textContent = lang.clearDataBtn;
             document.getElementById('initialBudget').placeholder = lang.initialBudgetPlaceholder;
             document.getElementById('incomeAmount').placeholder = lang.incomePlaceholder;
             document.getElementById('expenseAmount').placeholder = lang.expensePlaceholder;
@@ -306,7 +431,10 @@
 
         function updateBalance() {
             const balanceElement = document.getElementById('balance');
-            balanceElement.textContent = translations[currentLang].balance.replace('{amount}', balance.toFixed(2));
+            const displayBalance = balance * exchangeRates[currentCurrency];
+            balanceElement.textContent = translations[currentLang].balance
+                .replace('{amount}', displayBalance.toFixed(2))
+                .replace('{currency}', currentCurrency);
             if (balance > 0) {
                 balanceElement.classList.add('positive');
                 balanceElement.classList.remove('negative');
@@ -320,8 +448,9 @@
 
         function addTransaction(type, category, amount) {
             const date = new Date().toLocaleString(currentLang === 'zh-TW' ? 'zh-TW' : 'en-US');
-            transactions.push({ type, category, amount, date });
+            transactions.push({ type, category, amount, date, currency: currentCurrency });
             renderTransactions();
+            saveState();
         }
 
         function renderTransactions() {
@@ -329,11 +458,13 @@
             tbody.innerHTML = '';
             transactions.forEach((tx, index) => {
                 const lang = translations[currentLang];
+                // 將交易金額轉換為當前貨幣
+                const displayAmount = tx.amount * (exchangeRates[currentCurrency] / exchangeRates[tx.currency]);
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${lang[tx.type]}</td>
                     <td>${tx.category ? lang.categories[tx.category] : '-'}</td>
-                    <td>${tx.amount.toFixed(2)}</td>
+                    <td>${displayAmount.toFixed(2)} ${currentCurrency}</td>
                     <td>${tx.date}</td>
                     <td><button class="delete-btn" onclick="deleteTransaction(${index})">${lang.deleteBtn}</button></td>
                 `;
@@ -343,22 +474,24 @@
 
         function deleteTransaction(index) {
             const tx = transactions[index];
-            if (tx.type === 'income' || tx.type === '收入') {
-                balance -= tx.amount;
+            if (tx.type === 'income' || tx.type === '收入' || tx.type === 'initialBudget') {
+                balance -= tx.amount / exchangeRates[tx.currency];
             } else if (tx.type === 'expense' || tx.type === '支出') {
-                balance += tx.amount;
+                balance += tx.amount / exchangeRates[tx.currency];
             }
             transactions.splice(index, 1);
             updateBalance();
             renderTransactions();
+            saveState();
         }
 
         function setInitialBudget() {
-            const initial = parseFloat(document.getElementById('initialBudget').value);
-            if (!isNaN(initial)) {
-                balance = initial;
+            const input = parseFloat(document.getElementById('initialBudget').value);
+            if (!isNaN(input)) {
+                // 將輸入金額轉換為 NTD 儲存
+                balance = input / exchangeRates[currentCurrency];
                 updateBalance();
-                addTransaction('initialBudget', null, initial);
+                addTransaction('initialBudget', null, input);
                 document.getElementById('initialBudget').value = '';
             } else {
                 alert(translations[currentLang].invalidAmount);
@@ -368,7 +501,8 @@
         function addIncome() {
             const amount = parseFloat(document.getElementById('incomeAmount').value);
             if (!isNaN(amount) && amount > 0) {
-                balance += amount;
+                // 將輸入金額轉換為 NTD 儲存
+                balance += amount / exchangeRates[currentCurrency];
                 updateBalance();
                 addTransaction('income', null, amount);
                 document.getElementById('incomeAmount').value = '';
@@ -381,7 +515,8 @@
             const category = document.getElementById('expenseCategory').value;
             const amount = parseFloat(document.getElementById('expenseAmount').value);
             if (!isNaN(amount) && amount > 0) {
-                balance -= amount;
+                // 將輸入金額轉換為 NTD 儲存
+                balance -= amount / exchangeRates[currentCurrency];
                 updateBalance();
                 addTransaction('expense', category, amount);
                 document.getElementById('expenseAmount').value = '';
@@ -390,7 +525,8 @@
             }
         }
 
-        // 初始化
+        // 初始化：載入保存的狀態
+        loadState();
         changeLanguage();
         updateBalance();
     </script>
